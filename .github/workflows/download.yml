@@ -27,7 +27,7 @@ jobs:
           if [[ "$MSG" == *"download:"* ]]; then
             URLS=$(echo "$MSG" | grep -oP '(?<=download:\s).*')
             for URL in $URLS; do
-              wget -P downloads/ "$URL" || echo "Failed to download $URL"
+              wget -P downloads/ "$URL" || echo "Failed"
             done
             echo "commit_needed=true" >> $GITHUB_ENV
 
@@ -37,9 +37,7 @@ jobs:
             for URL in $URLS; do
               FILENAME=$(basename "$URL" | cut -d? -f1)
               ZIPNAME="${FILENAME%.*}.zip"
-              echo "Downloading $FILENAME..."
               wget -O "temp_dl/$FILENAME" "$URL" || echo "Failed"
-              echo "Zipping and splitting into 95MB chunks..."
               cd temp_dl
               zip -s 95m "../downloads/$ZIPNAME" "$FILENAME"
               cd ..
@@ -47,22 +45,12 @@ jobs:
             rm -rf temp_dl
             echo "commit_needed=true" >> $GITHUB_ENV
           
-          elif [[ "$MSG" == *"download-zip:"* ]]; then
-            URLS=$(echo "$MSG" | grep -oP '(?<=download-zip:\s).*')
-            TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-            ZIP_NAME="archive_${TIMESTAMP}.zip"
-            mkdir -p temp_dl
-            for URL in $URLS; do
-              wget -P temp_dl/ "$URL" || echo "Failed to download $URL"
-            done
-            cd temp_dl
-            zip -r ../downloads/$ZIP_NAME ./*
-            cd ..
-            rm -rf temp_dl
+          elif [[ "$MSG" == *"cleanup:"* ]]; then
+            rm -rf downloads/*
+            touch downloads/.keep
             echo "commit_needed=true" >> $GITHUB_ENV
             
           else
-            echo "No download command found."
             echo "commit_needed=false" >> $GITHUB_ENV
           fi
 
@@ -71,6 +59,6 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add downloads/
-          git commit -m "chore: save downloaded files [skip ci]" || echo "No changes to commit"
+          git add -A downloads/
+          git commit -m "chore: update files [skip ci]" || echo "No changes"
           git push
