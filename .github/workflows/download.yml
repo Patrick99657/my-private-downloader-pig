@@ -17,7 +17,6 @@ jobs:
         run: |
           MSG="${{ github.event.head_commit.message }}"
           
-          # Skip if it's an automated commit to prevent infinite loop
           if [[ "$MSG" == *"[skip ci]"* ]]; then
             echo "Skipping automated commit."
             exit 0
@@ -31,17 +30,31 @@ jobs:
               wget -P downloads/ "$URL" || echo "Failed to download $URL"
             done
             echo "commit_needed=true" >> $GITHUB_ENV
+
+          elif [[ "$MSG" == *"download-split:"* ]]; then
+            URLS=$(echo "$MSG" | grep -oP '(?<=download-split:\s).*')
+            mkdir -p temp_dl
+            for URL in $URLS; do
+              FILENAME=$(basename "$URL" | cut -d? -f1)
+              ZIPNAME="${FILENAME%.*}.zip"
+              echo "Downloading $FILENAME..."
+              wget -O "temp_dl/$FILENAME" "$URL" || echo "Failed"
+              echo "Zipping and splitting into 95MB chunks..."
+              cd temp_dl
+              zip -s 95m "../downloads/$ZIPNAME" "$FILENAME"
+              cd ..
+            done
+            rm -rf temp_dl
+            echo "commit_needed=true" >> $GITHUB_ENV
           
           elif [[ "$MSG" == *"download-zip:"* ]]; then
             URLS=$(echo "$MSG" | grep -oP '(?<=download-zip:\s).*')
             TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
             ZIP_NAME="archive_${TIMESTAMP}.zip"
-            
             mkdir -p temp_dl
             for URL in $URLS; do
               wget -P temp_dl/ "$URL" || echo "Failed to download $URL"
             done
-            
             cd temp_dl
             zip -r ../downloads/$ZIP_NAME ./*
             cd ..
