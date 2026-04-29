@@ -1,0 +1,63 @@
+name: Download Files
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Process Download Command
+        id: process
+        run: |
+          MSG="${{ github.event.head_commit.message }}"
+          
+          # Skip if it's an automated commit to prevent infinite loop
+          if [[ "$MSG" == *"[skip ci]"* ]]; then
+            echo "Skipping automated commit."
+            exit 0
+          fi
+
+          mkdir -p downloads
+
+          if [[ "$MSG" == *"download:"* ]]; then
+            URLS=$(echo "$MSG" | grep -oP '(?<=download:\s).*')
+            for URL in $URLS; do
+              wget -P downloads/ "$URL" || echo "Failed to download $URL"
+            done
+            echo "commit_needed=true" >> $GITHUB_ENV
+          
+          elif [[ "$MSG" == *"download-zip:"* ]]; then
+            URLS=$(echo "$MSG" | grep -oP '(?<=download-zip:\s).*')
+            TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+            ZIP_NAME="archive_${TIMESTAMP}.zip"
+            
+            mkdir -p temp_dl
+            for URL in $URLS; do
+              wget -P temp_dl/ "$URL" || echo "Failed to download $URL"
+            done
+            
+            cd temp_dl
+            zip -r ../downloads/$ZIP_NAME ./*
+            cd ..
+            rm -rf temp_dl
+            echo "commit_needed=true" >> $GITHUB_ENV
+            
+          else
+            echo "No download command found."
+            echo "commit_needed=false" >> $GITHUB_ENV
+          fi
+
+      - name: Commit and Push
+        if: env.commit_needed == 'true'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add downloads/
+          git commit -m "chore: save downloaded files [skip ci]" || echo "No changes to commit"
+          git push
